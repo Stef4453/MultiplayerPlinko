@@ -7,8 +7,8 @@
     <title>Plinko Multiplayer</title>
     <!-- Matter.js for physics -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-    <!-- PeerJS for P2P Multiplayer -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- Ably for Realtime Messaging Relay -->
+    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
     <style>
         :root {
             --bg-color: #0d1e29;
@@ -357,9 +357,9 @@
             }
         };
 
-        const peerConfig = {
-            secure: true
-        };
+        // --- DON'T EVEN BOTHER STEALING IT - YOU WON'T BE ABLE TO DO MUCH ANYWAY -Stef ---
+        const ABLY_KEY = 'Wwc3Hw.ZDnKdg:aX6tvLkW4-tIKleXroX-f4YacnGk5uNzEmMrJ3q13D8';
+        let ably, channel;
 
         // ... variables ...
         let myId;
@@ -394,163 +394,134 @@
             Runner.run(runner, engine);
         });
 
-        // --- Networking ---
+        // --- Networking (Ably) ---
         function hostGame() {
             myName = document.getElementById('name-input').value || "Host";
             const val = parseInt(document.getElementById('max-players-input').value);
             maxPlayersLimit = (val && val >= 2) ? val : 8;
 
-            const shortId = generateShortId();
-            peer = new Peer(shortId, peerConfig);
-            peer.on('open', id => {
-                myId = id;
-                isHost = true;
-                myName = getUniqueName(myName);
-                document.getElementById('room-id-display').innerText = id;
-                document.getElementById('pre-room').style.display = 'none';
-                document.getElementById('wait-room').style.display = 'block';
-                players.push({ id, name: myName, points: 1000, isHost: true, alive: true });
-                updatePlayerList();
-            });
-
-            peer.on('connection', c => {
-                if (players.length >= 8 || gameActive) {
-                    c.on('open', () => c.send({ type: 'error', msg: 'Room full or game already started' }));
-                    return;
-                }
-                setupConnection(c);
-            });
+            const roomCode = generateShortId();
+            initAbly(roomCode, true);
         }
 
         function joinGame() {
-            let roomId = document.getElementById('join-room-id').value;
-            if (!roomId) return alert("Please enter a Room ID");
-
-            roomId = roomId.trim().toUpperCase(); // Fix mobile casing issues
+            let roomCode = document.getElementById('join-room-id').value;
+            if (!roomCode) return alert("Please enter a Room ID");
+            roomCode = roomCode.trim().toUpperCase();
 
             myName = document.getElementById('name-input').value || "Guest";
-            document.getElementById('start-game-btn').disabled = true;
-
-            peer = new Peer(null, peerConfig);
-
-            peer.on('open', id => {
-                myId = id;
-                const c = peer.connect(roomId);
-
-                // Connection Error Handling
-                c.on('error', (err) => {
-                    console.error("Connection Error:", err);
-                    alert("Could not connect to host. Check Room ID.");
-                    location.reload();
-                });
-
-                setupConnection(c);
-            });
-
-            peer.on('error', (err) => {
-                if (err.type === 'peer-unavailable') {
-                    alert("Room ID not found! Please check the code.");
-                } else {
-                    alert("Connection Error: " + err.type);
-                }
-                location.reload();
-            });
+            initAbly(roomCode, false);
         }
 
-        function setupConnection(c) {
-            conn = c;
-            c.on('open', () => {
-                if (!isHost) {
-                    c.send({ type: 'join', name: myName, id: myId });
+        function initAbly(roomCode, hosting) {
+            isHost = hosting;
+            myId = Math.random().toString(36).substr(2, 9);
+
+            ably = new Ably.Realtime({ key: ABLY_KEY, clientId: myId });
+            channel = ably.channels.get(`plinko_${roomCode}`);
+
+            ably.connection.on('connected', () => {
+                if (hosting) {
+                    isHost = true;
+                    myName = getUniqueName(myName);
+                    document.getElementById('room-id-display').innerText = roomCode;
+                    document.getElementById('pre-room').style.display = 'none';
+                    document.getElementById('wait-room').style.display = 'block';
+                    players = [{ id: myId, name: myName, points: 1000, isHost: true, alive: true }];
+                    updatePlayerList();
+                }
+
+                // Subscribe to messages
+                channel.subscribe(msg => {
+                    if (msg.clientId === myId) return; // Ignore self
+                    handleMessage(msg.data);
+                });
+
+                // Presence tracking
+                channel.presence.subscribe('enter', member => {
+                    if (isHost && member.clientId !== myId) {
+                        // When someone enters, if we are host, we wait for their 'join' message
+                        // though presence itself can tell us they are here.
+                    }
+                });
+
+                channel.presence.subscribe('leave', member => {
+                    handleDisconnect(member.clientId);
+                });
+
+                channel.presence.enter({ name: myName });
+
+                if (!hosting) {
+                    broadcast({ type: 'join', name: myName, id: myId });
                     document.getElementById('pre-room').style.display = 'none';
                     document.getElementById('wait-room').style.display = 'block';
                     document.getElementById('start-game-btn').style.display = 'none';
-                    document.getElementById('room-id-display').innerText = c.peer;
+                    document.getElementById('room-id-display').innerText = roomCode;
                 }
             });
 
-            c.on('close', () => {
-                if (isHost) {
-                    handleDisconnect(c.peer);
-                } else {
-                    alert("Disconnected from host.");
-                    location.reload();
-                }
-            });
-
-            c.on('error', (err) => {
-                console.error("Peer Error:", err);
-                if (isHost) handleDisconnect(c.peer);
-            });
-
-            c.on('data', data => {
-                switch (data.type) {
-                    case 'ping':
-                        conn.send({ type: 'pong', id: myId });
-                        break;
-                    case 'pong':
-                        if (isHost) {
-                            const p = players.find(x => x.id === data.id);
-                            if (p) p.lastPing = Date.now();
-                        }
-                        break;
-                    case 'join':
-                        if (isHost) {
-                            if (players.length >= maxPlayersLimit) {
-                                c.send({ type: 'error', msg: "Room is full!" });
-                                setTimeout(() => c.close(), 500);
-                                return;
-                            }
-                            const newName = getUniqueName(data.name);
-                            players.push({ id: data.id, name: newName, points: 1000, isHost: false, alive: true, conn: c, lastPing: Date.now() });
-                            broadcastPlayers();
-                            updatePlayerList();
-                        }
-                        break;
-                    case 'players':
-                        players = data.players;
-                        if (data.maxPlayers) maxPlayersLimit = data.maxPlayers; // Sync limit
-                        updatePlayerList();
-                        break;
-                    case 'start':
-                        gameActive = true;
-                        currentObstacles = data.obstacles || [];
-                        turnIndex = data.turnIndex !== undefined ? data.turnIndex : 0;
-                        document.getElementById('lobby-screen').style.display = 'none';
-                        document.getElementById('main-game').style.display = 'flex';
-                        initGame(true); // Force first init
-                        updateTurnUI();
-                        break;
-                    case 'sync_round':
-                        currentRound = data.round;
-                        turnIndex = data.turnIndex;
-                        currentObstacles = data.obstacles || [];
-                        initGame();
-                        updateTurnUI();
-                        break;
-                    case 'drop_ball':
-                        if (isHost) {
-                            handleDropLogic(data.x, data.playerId, data.points);
-                        } else {
-                            visualizeDrop(data.x, data.playerId, data.points);
-                        }
-                        break;
-                    case 'score_update':
-                        const p = players.find(x => x.id === data.playerId);
-                        if (p) {
-                            p.points = data.points;
-                            if (p.points < 10) p.alive = false; // Min 10 points to survive
-                        }
-                        updatePlayerList();
-                        showFloatingResult(data.binX, data.multiplier, data.diff);
-                        break;
-                    case 'error':
-                        alert(data.msg);
-                        location.reload();
-                        break;
-                }
-            });
+            ably.connection.on('failed', () => alert("Connection to Ably failed!"));
         }
+
+        function handleMessage(data) {
+            switch (data.type) {
+                case 'join':
+                    if (isHost) {
+                        if (players.length >= maxPlayersLimit) {
+                            broadcast({ type: 'error', msg: "Room is full!", targetId: data.id });
+                            return;
+                        }
+                        const newName = getUniqueName(data.name);
+                        players.push({ id: data.id, name: newName, points: 1000, isHost: false, alive: true, lastPing: Date.now() });
+                        broadcastPlayers();
+                        updatePlayerList();
+                    }
+                    break;
+                case 'players':
+                    players = data.players;
+                    if (data.maxPlayers) maxPlayersLimit = data.maxPlayers;
+                    updatePlayerList();
+                    break;
+                case 'start':
+                    gameActive = true;
+                    currentObstacles = data.obstacles || [];
+                    turnIndex = data.turnIndex !== undefined ? data.turnIndex : 0;
+                    document.getElementById('lobby-screen').style.display = 'none';
+                    document.getElementById('main-game').style.display = 'flex';
+                    initGame(true);
+                    updateTurnUI();
+                    break;
+                case 'sync_round':
+                    currentRound = data.round;
+                    turnIndex = data.turnIndex;
+                    currentObstacles = data.obstacles || [];
+                    initGame();
+                    updateTurnUI();
+                    break;
+                case 'drop_ball':
+                    if (isHost) {
+                        handleDropLogic(data.x, data.playerId, data.points);
+                    } else {
+                        visualizeDrop(data.x, data.playerId, data.points);
+                    }
+                    break;
+                case 'score_update':
+                    const p = players.find(x => x.id === data.playerId);
+                    if (p) {
+                        p.points = data.points;
+                        if (p.points < 10) p.alive = false;
+                    }
+                    updatePlayerList();
+                    showFloatingResult(data.binX, data.multiplier, data.diff);
+                    break;
+                case 'error':
+                    if (data.targetId && data.targetId !== myId) return;
+                    alert(data.msg);
+                    location.reload();
+                    break;
+            }
+        }
+
 
         function handleDisconnect(peerId) {
             const index = players.findIndex(p => p.id === peerId);
@@ -583,33 +554,14 @@
             }
         }
 
-        // Heartbeat Interval
-        setInterval(() => {
-            if (!isHost) return;
-            const now = Date.now();
-            // Send Pings
-            players.forEach(p => {
-                if (!p.isHost && p.conn && p.conn.open) p.conn.send({ type: 'ping' });
-            });
-            // Check Timeouts (5s)
-            for (let i = players.length - 1; i >= 0; i--) {
-                const p = players[i];
-                if (!p.isHost && now - (p.lastPing || now) > 5000) {
-                    console.log(`Player ${p.name} timed out.`);
-                    handleDisconnect(p.id);
-                }
-            }
-        }, 2000);
 
         function broadcastSync() {
             broadcast({ type: 'sync_round', round: currentRound, turnIndex, obstacles: currentObstacles });
         }
 
         function broadcast(data) {
-            if (isHost) {
-                players.forEach(p => p.conn && p.conn.send(data));
-            } else if (conn) {
-                conn.send(data);
+            if (channel) {
+                channel.publish('msg', data);
             }
         }
 
