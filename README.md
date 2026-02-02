@@ -1,4 +1,4 @@
 # MultiplayerPlinko
 
 # Vibe coded w/ Antigravity
-# Because of some problems with the multiplayer function, crossplay does not work (PCs can only play with other PCs, Phones can only play with other Phones; no matter the OS)
+# Multiplayer is kind of questionable right now. Expect glitches.
