@@ -364,7 +364,8 @@
                     { 'urls': 'stun:stun1.l.google.com:19302' },
                     { 'urls': 'stun:stun2.l.google.com:19302' },
                     { 'urls': 'stun:stun3.l.google.com:19302' },
-                    { 'urls': 'stun:stun4.l.google.com:19302' }
+                    { 'urls': 'stun:stun4.l.google.com:19302' },
+                    { 'urls': 'stun:global.stun.twilio.com:3478' }
                 ]
             }
         };
@@ -431,15 +432,37 @@
         }
 
         function joinGame() {
+            let roomId = document.getElementById('join-room-id').value;
+            if (!roomId) return alert("Please enter a Room ID");
+
+            roomId = roomId.trim().toUpperCase(); // Fix mobile casing issues
+
             myName = document.getElementById('name-input').value || "Guest";
-            const roomId = document.getElementById('join-room-id').value.trim();
-            if (!roomId) return alert("Enter Room ID");
+            document.getElementById('start-game-btn').disabled = true;
 
             peer = new Peer(null, peerConfig);
+
             peer.on('open', id => {
                 myId = id;
                 const c = peer.connect(roomId);
+
+                // Connection Error Handling
+                c.on('error', (err) => {
+                    console.error("Connection Error:", err);
+                    alert("Could not connect to host. Check Room ID.");
+                    location.reload();
+                });
+
                 setupConnection(c);
+            });
+
+            peer.on('error', (err) => {
+                if (err.type === 'peer-unavailable') {
+                    alert("Room ID not found! Please check the code.");
+                } else {
+                    alert("Connection Error: " + err.type);
+                }
+                location.reload();
             });
         }
 
