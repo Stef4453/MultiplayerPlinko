@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plinko</title>
+    <title>Plinko Multiplayer</title>
     <!-- Matter.js for physics -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <!-- PeerJS for P2P Multiplayer -->
@@ -358,19 +358,16 @@
         };
 
         const peerConfig = {
+            secure: true, // Required for HTTPS (GitHub Pages)
             config: {
                 'iceServers': [
                     { 'urls': 'stun:stun.l.google.com:19302' },
-                    { 'urls': 'stun:stun1.l.google.com:19302' },
-                    { 'urls': 'stun:stun2.l.google.com:19302' },
-                    { 'urls': 'stun:stun3.l.google.com:19302' },
-                    { 'urls': 'stun:stun4.l.google.com:19302' },
                     { 'urls': 'stun:global.stun.twilio.com:3478' }
                 ]
             }
         };
 
-        let peer, conn;
+        // ... variables ...
         let myId;
         let myName = "Player";
         let isHost = false;
@@ -1009,4 +1006,3 @@
 </body>
 
 </html>
-
