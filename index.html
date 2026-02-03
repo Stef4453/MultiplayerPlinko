@@ -499,8 +499,17 @@
                 });
 
                 channel.presence.subscribe('leave', member => {
-                    console.log("Member left presence:", member.clientId);
-                    if (isHost) handleDisconnect(member.clientId);
+                    console.log("Presence: Member left", member.clientId);
+                    if (isHost) {
+                        handleDisconnect(member.clientId);
+                    } else {
+                        // Guest detection: If the Host leaves, guests go back to lobby
+                        const hostPlayer = players.find(p => p.isHost);
+                        if (hostPlayer && hostPlayer.id === member.clientId) {
+                            alert("Host has left the room. Returning to lobby.");
+                            location.reload();
+                        }
+                    }
                 });
 
                 channel.presence.enter({ name: myName });
@@ -517,6 +526,12 @@
                         channel.presence.get((err, members) => {
                             if (!err && members) {
                                 const currentAblyIds = members.map(m => m.clientId);
+
+                                // SELF-VERIFY: If host isn't in the list, the list is stale. Do NOT kick.
+                                if (!currentAblyIds.includes(myId)) {
+                                    console.log("Presence Guard: Host not in list (stale), skipping sync.");
+                                    return;
+                                }
                                 for (let i = players.length - 1; i >= 0; i--) {
                                     const p = players[i];
                                     if (p.isHost) continue; // Don't disconnect host
@@ -544,6 +559,7 @@
                     document.getElementById('wait-room').style.display = 'block';
                     document.getElementById('start-game-btn').style.display = 'none';
                     document.getElementById('room-id-display').innerText = roomCode;
+                    updatePlayerList(); // Initial update for guest
                 }
             });
 
@@ -633,18 +649,20 @@
             }
             if (gameActive) {
                 if (wasTheirTurn) {
-                    turnIndex--; // Back up so nextTurn increments to the correct next player
+                    turnIndex--;
                     if (turnIndex < -1) turnIndex = -1;
                     nextTurn(true);
                 } else if (index < turnIndex) {
-                    turnIndex--; // Correct shift if a previous player left
+                    turnIndex--;
                 }
                 broadcastPlayers();
                 broadcastSync();
                 updateTurnUI();
             } else {
+                // Lobby phase: just sync the list
                 broadcastPlayers();
                 updatePlayerList();
+                console.log("Lobby Sync: Player left, broadcasting new list. Current count:", players.length);
             }
         }
 
