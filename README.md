@@ -1,4 +1,4 @@
 # MultiplayerPlinko
 
 # Vibe coded w/ Antigravity
-# Multiplayer is kind of questionable right now. Expect glitches.
+# WIP on the Multiplayer component. Expect glitches.
