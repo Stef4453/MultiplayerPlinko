@@ -642,6 +642,14 @@
                     currentRound = data.round;
                     turnIndex = data.turnIndex;
                     currentObstacles = data.obstacles || [];
+
+                    // If we're still in lobby, transition to game (for mid-game joins)
+                    if (document.getElementById('lobby-screen').style.display !== 'none') {
+                        gameActive = true;
+                        document.getElementById('lobby-screen').style.display = 'none';
+                        document.getElementById('main-game').style.display = 'flex';
+                    }
+
                     initGame();
                     updateTurnUI();
                     break;
@@ -917,39 +925,38 @@
 
                     div.innerHTML = `
                         <span>${idx + 1}. ${p.name}${p.id === myId ? ' (You)' : ''}</span>
-                        <span style="font-weight:900">${Math.floor(p.points)}</span>
                         ${kickBtn}
                     `;
                     lobbyContainer.appendChild(div);
                 });
             }
 
-            // Update game player list (if visible)
+            // Update game player list (if visible) - only show alive players
             const container = document.getElementById('player-list');
             if (!container) return;
             container.innerHTML = '';
-            sortedPlayers.forEach((p, idx) => {
+
+            // Filter to only show alive players in leaderboard
+            const alivePlayers = sortedPlayers.filter(p => p.alive);
+
+            alivePlayers.forEach((p, idx) => {
                 const div = document.createElement('div');
 
                 // Find original index for turn indicator
                 const originalIdx = players.findIndex(pl => pl.id === p.id);
-                div.className = `player-item ${originalIdx === turnIndex ? 'active' : ''} ${!p.alive ? 'eliminated' : ''}`;
+                div.className = `player-item ${originalIdx === turnIndex ? 'active' : ''}`;
 
                 const kickBtn = (isHost && !p.isHost) ?
                     `<button onclick="kickPlayer('${p.id}')" style="margin-left: auto; padding: 4px 8px; background: #ff1744; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">KICK</button>` : '';
 
                 div.innerHTML = `
-                <span>${idx + 1}. ${p.name}${p.id === myId ? ' (You)' : ''}${!p.alive ? ' 💀' : ''}</span>
+                <span>${idx + 1}. ${p.name}${p.id === myId ? ' (You)' : ''}</span>
                 <span style="font-weight:900">${Math.floor(p.points)}</span>
                 ${kickBtn}
             `;
                 container.appendChild(div);
                 if (p.id === myId) {
                     document.getElementById('my-score').innerText = Math.floor(p.points);
-                    if (!p.alive) {
-                        document.getElementById('drop-btn').disabled = true;
-                        document.getElementById('status-text').innerText = "Eliminated!";
-                    }
                 }
             });
         }
