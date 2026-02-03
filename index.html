@@ -337,6 +337,12 @@
             <div id="wait-room" style="display: none;">
                 <p>Room ID: <span id="room-id-display">Generating...</span></p>
                 <p id="player-count">Players: 1/8</p>
+
+                <!-- Lobby Player List -->
+                <div id="lobby-player-list" style="margin: 15px 0; max-height: 200px; overflow-y: auto;">
+                    <!-- Players will be listed here -->
+                </div>
+
                 <button onclick="startGame()" id="start-game-btn" class="btn-primary"
                     style="background: #00e701; color: #000; margin-top: 15px;">START GAME</button>
             </div>
@@ -593,10 +599,27 @@
                             return;
                         }
                         const newName = getUniqueName(data.name);
-                        players.push({ id: data.id, name: newName, points: 1000, isHost: false, alive: true, joinedAt: Date.now() });
+
+                        // If game is active, join as spectator (alive: false, low points)
+                        if (gameActive) {
+                            players.push({ id: data.id, name: newName, points: 0, isHost: false, alive: false, joinedAt: Date.now() });
+                            broadcast({ type: 'spectator_join', name: newName });
+                        } else {
+                            players.push({ id: data.id, name: newName, points: 1000, isHost: false, alive: true, joinedAt: Date.now() });
+                        }
+
                         broadcastPlayers();
                         updatePlayerList();
+
+                        // Send current game state to new joiner
+                        if (gameActive) {
+                            broadcast({ type: 'sync_round', round: currentRound, turnIndex, obstacles: currentObstacles });
+                        }
                     }
+                    break;
+                case 'spectator_join':
+                    // Notify existing players that someone joined as spectator
+                    console.log(`${data.name} joined as spectator`);
                     break;
                 case 'heartbeat':
                     // Keep-alive message to maintain active connection
@@ -648,6 +671,11 @@
                         alert("You have been kicked by the host.");
                         location.reload();
                     }
+                    break;
+                case 'game_end':
+                    // Transition to new room after game ends
+                    alert(`🎮 Game Over! 🏆\n\nWinner: ${data.winner}\n\nReturning to lobby...`);
+                    location.reload();
                     break;
             }
         }
@@ -873,19 +901,45 @@
             const startBtn = document.getElementById('start-game-btn');
             if (startBtn && isHost) startBtn.disabled = players.length < 2;
 
+            // Sort players by points (descending) for leaderboard
+            const sortedPlayers = [...players].sort((a, b) => b.points - a.points);
+
+            // Update lobby player list (if visible)
+            const lobbyContainer = document.getElementById('lobby-player-list');
+            if (lobbyContainer) {
+                lobbyContainer.innerHTML = '';
+                sortedPlayers.forEach((p, idx) => {
+                    const div = document.createElement('div');
+                    div.className = 'player-item';
+
+                    const kickBtn = (isHost && !p.isHost) ?
+                        `<button onclick="kickPlayer('${p.id}')" style="margin-left: auto; padding: 4px 8px; background: #ff1744; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">KICK</button>` : '';
+
+                    div.innerHTML = `
+                        <span>${idx + 1}. ${p.name}${p.id === myId ? ' (You)' : ''}</span>
+                        <span style="font-weight:900">${Math.floor(p.points)}</span>
+                        ${kickBtn}
+                    `;
+                    lobbyContainer.appendChild(div);
+                });
+            }
+
+            // Update game player list (if visible)
             const container = document.getElementById('player-list');
             if (!container) return;
             container.innerHTML = '';
-            players.forEach((p, idx) => {
+            sortedPlayers.forEach((p, idx) => {
                 const div = document.createElement('div');
-                div.className = `player-item ${idx === turnIndex ? 'active' : ''} ${!p.alive ? 'eliminated' : ''}`;
 
-                // Add kick button for host (only for non-host players)
+                // Find original index for turn indicator
+                const originalIdx = players.findIndex(pl => pl.id === p.id);
+                div.className = `player-item ${originalIdx === turnIndex ? 'active' : ''} ${!p.alive ? 'eliminated' : ''}`;
+
                 const kickBtn = (isHost && !p.isHost) ?
                     `<button onclick="kickPlayer('${p.id}')" style="margin-left: auto; padding: 4px 8px; background: #ff1744; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">KICK</button>` : '';
 
                 div.innerHTML = `
-                <span>${p.name}${p.id === myId ? ' (You)' : ''}</span>
+                <span>${idx + 1}. ${p.name}${p.id === myId ? ' (You)' : ''}${!p.alive ? ' 💀' : ''}</span>
                 <span style="font-weight:900">${Math.floor(p.points)}</span>
                 ${kickBtn}
             `;
@@ -1004,23 +1058,26 @@
 
                     const alivePlayers = players.filter(p => p.points >= 10); // Min 10 to survive
                     if (alivePlayers.length <= 1 || currentRound > 16) {
-                        let msg = "";
+                        let winnerName = "";
                         if (alivePlayers.length === 1) {
-                            msg = `GAME OVER! Winner: ${alivePlayers[0].name}`;
+                            winnerName = alivePlayers[0].name;
                         } else if (alivePlayers.length > 1) {
                             let maxPts = -1;
                             let tied = false;
-                            let winner = "";
                             alivePlayers.forEach(p => {
-                                if (p.points > maxPts) { maxPts = p.points; winner = p.name; tied = false; }
+                                if (p.points > maxPts) { maxPts = p.points; winnerName = p.name; tied = false; }
                                 else if (p.points === maxPts) { tied = true; }
                             });
-                            msg = tied ? "GAME OVER! It's a TIE!" : `GAME OVER! Winner: ${winner}`;
+                            winnerName = tied ? "TIE - Multiple Winners!" : winnerName;
                         } else {
-                            msg = "GAME OVER! Everyone eliminated!";
+                            winnerName = "No survivors";
                         }
-                        broadcast({ type: 'error', msg });
-                        alert(msg);
+
+                        // Broadcast game end to all players
+                        broadcast({ type: 'game_end', winner: winnerName });
+
+                        // Host also sees the message
+                        alert(`🎮 Game Over! 🏆\n\nWinner: ${winnerName}\n\nReturning to lobby...`);
                         location.reload();
                         return;
                     }
