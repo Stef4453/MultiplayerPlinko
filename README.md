@@ -4,7 +4,7 @@ A physics-based multiplayer game inspired by classic Plinko mechanics. Players c
 
 ## Game Presentation
 
-Plinko Royale is a real-time multiplayer game built with Matter.js for physics and Ably.io for networking. It features high-stakes point management, progressive difficulty and more. The game scales across desktop and mobile devices, allowing for seamless cross-play.
+Multiplayer Plinko is a real-time multiplayer game built with Matter.js for physics and Ably.io for networking. It features high-stakes point management, progressive difficulty and more. The game scales across desktop and mobile devices, allowing for seamless cross-play.
 
 ## Game Rules
 
