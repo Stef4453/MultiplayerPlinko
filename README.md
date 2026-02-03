@@ -30,7 +30,7 @@ The game progresses through 16 rounds with increasing difficulty levels:
 
 ### Spectating
 Players joining a game already in progress enter as Spectators. They can watch the current match and will be automatically added as active players when the next game starts.
-**KNOWN BUG: Players who don't click "OK" in the "Game Finished" screen before the host starts a new game will not be added to the next game.
+# **KNOWN BUG: Players who don't click "OK" in the "Game Finished" screen before the host starts a new game will not be added to the next game.
 
 ## Admin Commands
 
