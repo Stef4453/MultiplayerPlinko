@@ -509,13 +509,18 @@
                 if (hosting) {
                     setInterval(() => {
                         channel.presence.get((err, members) => {
-                            if (!err) {
+                            if (!err && members) {
                                 const currentAblyIds = members.map(m => m.clientId);
-                                // Check if anyone in our players list is NOT in Ably anymore
                                 for (let i = players.length - 1; i >= 0; i--) {
-                                    if (!currentAblyIds.includes(players[i].id)) {
-                                        console.log("Presence sync: Player missing", players[i].id);
-                                        handleDisconnect(players[i].id);
+                                    const p = players[i];
+                                    if (p.isHost) continue; // Don't disconnect host
+
+                                    // 10s grace period for newly joined players
+                                    if (Date.now() - (p.lastPing || 0) < 10000) continue;
+
+                                    if (!currentAblyIds.includes(p.id)) {
+                                        console.log("Presence sync: Player missing", p.id);
+                                        handleDisconnect(p.id);
                                     }
                                 }
                             }
