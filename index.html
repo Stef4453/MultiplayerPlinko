@@ -643,6 +643,12 @@
                     alert(data.msg);
                     location.reload();
                     break;
+                case 'kick':
+                    if (data.targetId === myId) {
+                        alert("You have been kicked by the host.");
+                        location.reload();
+                    }
+                    break;
             }
         }
 
@@ -699,6 +705,17 @@
         function broadcastPlayers() {
             const list = players.map(p => ({ id: p.id, name: p.name, points: p.points, isHost: p.isHost, alive: p.alive }));
             broadcast({ type: 'players', players: list, maxPlayers: maxPlayersLimit });
+        }
+
+        function kickPlayer(playerId) {
+            if (!isHost) return;
+            console.log("Host kicking player:", playerId);
+
+            // Send kick message to the player
+            broadcast({ type: 'kick', targetId: playerId });
+
+            // Remove from local list
+            handleDisconnect(playerId);
         }
 
         // --- Game Logic ---
@@ -862,9 +879,15 @@
             players.forEach((p, idx) => {
                 const div = document.createElement('div');
                 div.className = `player-item ${idx === turnIndex ? 'active' : ''} ${!p.alive ? 'eliminated' : ''}`;
+
+                // Add kick button for host (only for non-host players)
+                const kickBtn = (isHost && !p.isHost) ?
+                    `<button onclick="kickPlayer('${p.id}')" style="margin-left: auto; padding: 4px 8px; background: #ff1744; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">KICK</button>` : '';
+
                 div.innerHTML = `
                 <span>${p.name}${p.id === myId ? ' (You)' : ''}</span>
                 <span style="font-weight:900">${Math.floor(p.points)}</span>
+                ${kickBtn}
             `;
                 container.appendChild(div);
                 if (p.id === myId) {
