@@ -492,27 +492,28 @@
 
                 // Presence tracking
                 channel.presence.subscribe('enter', member => {
+                    console.log("Presence: Member entered", member.clientId, member.data);
                     if (isHost && member.clientId !== myId) {
-                        // When someone enters, if we are host, we wait for their 'join' message
-                        // though presence itself can tell us they are here.
+                        // When someone enters the channel, ensure they get a fresh player list
+                        broadcastPlayers();
                     }
                 });
 
                 channel.presence.subscribe('leave', member => {
-                    console.log("Presence: Member left", member.clientId);
+                    console.log("Presence: Member left", member.clientId, member.data);
                     if (isHost) {
                         handleDisconnect(member.clientId);
                     } else {
-                        // Guest detection: If the Host leaves, guests go back to lobby
-                        const hostPlayer = players.find(p => p.isHost);
-                        if (hostPlayer && hostPlayer.id === member.clientId) {
+                        // Much more robust Host detection: check for isHost flag in presence data
+                        if (member.data && member.data.isHost) {
+                            console.log("Presence Guard: Detected Host departure.");
                             alert("Host has left the room. Returning to lobby.");
                             location.reload();
                         }
                     }
                 });
 
-                channel.presence.enter({ name: myName });
+                channel.presence.enter({ name: myName, isHost: isHost });
 
                 // Host-only networking maintenance
                 if (hosting) {
@@ -527,9 +528,9 @@
                             if (!err && members) {
                                 const currentAblyIds = members.map(m => m.clientId);
 
-                                // SELF-VERIFY: If host isn't in the list, the list is stale. Do NOT kick.
+                                // SELF-VERIFY: If host isn't in the list, the list might be stale. Do NOT kick.
                                 if (!currentAblyIds.includes(myId)) {
-                                    console.log("Presence Guard: Host not in list (stale), skipping sync.");
+                                    console.log("Presence Guard: Local Host ID not found in presence list yet.");
                                     return;
                                 }
                                 for (let i = players.length - 1; i >= 0; i--) {
@@ -630,6 +631,7 @@
 
 
         function handleDisconnect(peerId) {
+            if (peerId === myId) return; // Safety: Never disconnect ourselves
             console.log("handleDisconnect called for:", peerId);
             const index = players.findIndex(p => p.id === peerId);
             if (index === -1) {
