@@ -46,5 +46,5 @@ To see all available commands, type into the console:
 - PlinkoAdmin.forceWin(index): End the current game immediately and declare a specific player the winner.
 - PlinkoAdmin.shutdown(): Force a session-wide reload for all players to clear the room.
 
-## Have fun playing and make sure to send me any bugs you may find in the game! Remember this is just a project made for fun, so I won't be able to fix everything too fast.
-## Plinko Multiplayer. Vibe-Coded by Stef using Antigravity.
+## Have fun playing and make sure to send me any bugs you may find in the game! Remember: this is just a project made for fun, so I won't be able to fix everything too fast.
+Plinko Multiplayer. Vibe-Coded by Stef using Antigravity.
