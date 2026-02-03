@@ -15,9 +15,9 @@ The goal is to survive all rounds by maintaining a positive point balance. If yo
 The game progresses through 16 rounds with increasing difficulty levels:
 - Easy (Rounds 1-2): Standard 8-row peg board.
 - Medium (Rounds 3-4): 12-row peg board for more variance.
-- Hard (Rounds 5-6): 16-row board with moving obstacles.
-- Insane (Rounds 7-11): 16-row board with rotating red bricks.
-- Impossible (Rounds 12-16): Adds "X0" center dividers that void your drop points entirely.
+- Hard (Rounds 5-6): 16-row board with obstacles where balls can get stuck.
+- Insane (Rounds 7-11): Same as Hard, but with lower chances of multiplying points and trickier obstacles.
+- Impossible (Rounds 12-16): Worse chances of multiplying points and some obstacles in the middle where balls can get stuck easily.
 
 ### Gameplay Mechanics
 - Each player starts with 1000 points.
@@ -30,6 +30,7 @@ The game progresses through 16 rounds with increasing difficulty levels:
 
 ### Spectating
 Players joining a game already in progress enter as Spectators. They can watch the current match and will be automatically added as active players when the next game starts.
+**KNOWN BUG: Players who don't click "OK" in the "Game Finished" screen before the host starts a new game will not be added to the next game.
 
 ## Admin Commands
 
@@ -45,8 +46,5 @@ To see all available commands, type into the console:
 - PlinkoAdmin.forceWin(index): End the current game immediately and declare a specific player the winner.
 - PlinkoAdmin.shutdown(): Force a session-wide reload for all players to clear the room.
 
-## Technical Details
-
-- Physics Engine: Matter.js
-- Networking: Ably.io Realtime Messaging
-- Frontend: HTML5, CSS3 (Vanilla), JavaScript (ES6+)
+## Have fun playing and make sure to send me any bugs you may find in the game! Remember this is just a project made for fun, so I won't be able to fix everything too fast.
+## Plinko Multiplayer. Vibe-Coded by Stef using Antigravity.
