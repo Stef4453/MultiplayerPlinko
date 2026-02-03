@@ -49,4 +49,4 @@ To see all available commands, type into the console:
 ## Have fun playing and make sure to send me any bugs you may find!
 Plinko Multiplayer. Vibe-Coded by Stef using Antigravity.
 
-P.S.: Yes, there is an Ably API key in the code, but don't even try stealing it - you won't be able to do much with it. Plus, what the hell are you doing stealing free plan API keys? You'd be better off making an account yourself lol
+P.S.: Yes, there is an Ably API key in the code, but don't even try stealing it - you won't be able to do much with it. Plus, what the hell are you doing stealing free plan API keys? You'd be better off making one yourself lol
