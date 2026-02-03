@@ -505,8 +505,14 @@
 
                 channel.presence.enter({ name: myName });
 
-                // Host-only presence sync interval
+                // Host-only networking maintenance
                 if (hosting) {
+                    // 1. Keep-Alive Heartbeat (every 15s)
+                    setInterval(() => {
+                        if (channel) broadcast({ type: 'heartbeat' });
+                    }, 15000);
+
+                    // 2. Presence Sync Guard (every 5s)
                     setInterval(() => {
                         channel.presence.get((err, members) => {
                             if (!err && members) {
@@ -515,11 +521,11 @@
                                     const p = players[i];
                                     if (p.isHost) continue; // Don't disconnect host
 
-                                    // 10s grace period for newly joined players
-                                    if (Date.now() - (p.lastPing || 0) < 10000) continue;
+                                    // 15s grace period for newly joined players to register with Ably
+                                    if (Date.now() - (p.joinedAt || 0) < 15000) continue;
 
                                     if (!currentAblyIds.includes(p.id)) {
-                                        console.log("Presence sync: Player missing", p.id);
+                                        console.log("Presence Guard: Player missing - triggering disconnect", p.id);
                                         handleDisconnect(p.id);
                                     }
                                 }
@@ -553,10 +559,13 @@
                             return;
                         }
                         const newName = getUniqueName(data.name);
-                        players.push({ id: data.id, name: newName, points: 1000, isHost: false, alive: true, lastPing: Date.now() });
+                        players.push({ id: data.id, name: newName, points: 1000, isHost: false, alive: true, joinedAt: Date.now() });
                         broadcastPlayers();
                         updatePlayerList();
                     }
+                    break;
+                case 'heartbeat':
+                    // Keep-alive message to maintain active connection
                     break;
                 case 'players':
                     players = data.players;
