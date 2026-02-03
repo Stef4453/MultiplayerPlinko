@@ -1,6 +1,6 @@
-# Plinko Royale
+# Multiplayer Plinko
 
-A physics-based multiplayer battle royale inspired by classic Plinko mechanics. Players compete in rounds of ball-dropping action to be the last one standing.
+A physics-based multiplayer game inspired by classic Plinko mechanics. Players compete in rounds of ball-dropping action to be the last one standing.
 
 ## Game Presentation
 
