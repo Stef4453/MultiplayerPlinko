@@ -500,6 +500,7 @@
         let lastInitedRows = 0;
         let lastInitedRound = 0;
         let maxPlayersLimit = 8;
+        let currentBall = null; // Track active ball for sync
 
         // --- Persistent Matter.js Engine ---
         const { Engine, Render, Runner, Bodies, Composite, World, Events } = Matter;
@@ -753,6 +754,12 @@
                     }
                     updatePlayerList();
                     showFloatingResult(data.binX, data.multiplier, data.diff);
+                    break;
+                case 'ball_status':
+                    if (!isHost && currentBall) {
+                        Matter.Body.setPosition(currentBall, { x: data.x, y: data.y });
+                        Matter.Body.setVelocity(currentBall, { x: data.vx, y: data.vy });
+                    }
                     break;
                 case 'error':
                     if (data.targetId && data.targetId !== myId) return;
@@ -1091,14 +1098,17 @@
                 restitution: 0.5, friction: 0.05,
                 render: { fillStyle: playerId === myId ? '#00e701' : '#ff4d4d' }
             });
+            currentBall = ball;
             World.add(engine.world, ball);
 
             let completed = false;
             let setX0 = false;
+            let syncFrame = 0;
 
             const finalizeLanding = () => {
                 if (completed) return;
                 completed = true;
+                currentBall = null;
 
                 const relativeX = Math.min(Math.max(ball.position.x, 20), config.width - 20);
                 const mList = getMultipliersForRound(currentRound);
@@ -1146,6 +1156,19 @@
                             }
                         }
                     });
+                }
+
+                if (isHost && !completed) {
+                    syncFrame++;
+                    if (syncFrame % 5 === 0) {
+                        broadcast({
+                            type: 'ball_status',
+                            x: ball.position.x,
+                            y: ball.position.y,
+                            vx: ball.velocity.x,
+                            vy: ball.velocity.y
+                        });
+                    }
                 }
 
                 if (ball.position.y > config.height - 50) {
