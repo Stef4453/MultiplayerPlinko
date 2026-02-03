@@ -469,90 +469,93 @@
         function initAbly(roomCode, hosting) {
             isHost = hosting;
             myId = Math.random().toString(36).substr(2, 9);
+            console.log("Initializing Ably. ID:", myId, "Host:", isHost);
 
             ably = new Ably.Realtime({ key: ABLY_KEY, clientId: myId });
             channel = ably.channels.get(`plinko_${roomCode}`);
 
+            channel.attach((err) => {
+                if (err) console.error("Attachment failed:", err);
+                else console.log("Channel Attached.");
+            });
+
             ably.connection.on('connected', () => {
+                console.log("Ably Connected.");
+
                 if (hosting) {
                     isHost = true;
                     myName = getUniqueName(myName);
                     document.getElementById('room-id-display').innerText = roomCode;
                     document.getElementById('pre-room').style.display = 'none';
                     document.getElementById('wait-room').style.display = 'block';
-                    players = [{ id: myId, name: myName, points: 1000, isHost: true, alive: true }];
+                    players = [{ id: myId, name: myName, points: 1000, isHost: true, alive: true, joinedAt: Date.now() }];
                     updatePlayerList();
                 }
 
-                // Subscribe to messages
                 channel.subscribe(msg => {
-                    if (msg.clientId === myId) return; // Ignore self
+                    if (msg.clientId === myId) return;
                     handleMessage(msg.data);
                 });
 
-                // Presence tracking
+                // --- PROPER PRESENCE HANDLING ---
                 channel.presence.subscribe('enter', member => {
-                    console.log("Presence: Member entered", member.clientId, member.data);
-                    if (isHost && member.clientId !== myId) {
-                        // When someone enters the channel, ensure they get a fresh player list
-                        broadcastPlayers();
-                    }
+                    console.log("PRESENCE ENTER:", member.clientId, member.data);
+                    if (isHost) broadcastPlayers();
                 });
 
                 channel.presence.subscribe('leave', member => {
-                    console.log("Presence: Member left", member.clientId, member.data);
+                    console.log("PRESENCE LEAVE:", member.clientId, member.data);
                     if (isHost) {
                         handleDisconnect(member.clientId);
                     } else {
-                        // Much more robust Host detection: check for isHost flag in presence data
-                        if (member.data && member.data.isHost) {
-                            console.log("Presence Guard: Detected Host departure.");
-                            alert("Host has left the room. Returning to lobby.");
+                        const isHostLeaving = (member.data && member.data.isHost) ||
+                            players.some(p => p.isHost && p.id === member.clientId);
+                        if (isHostLeaving) {
+                            alert("Host left. Connection terminated.");
                             location.reload();
                         }
                     }
                 });
 
-                channel.presence.enter({ name: myName, isHost: isHost });
+                channel.presence.enter({ name: myName, isHost: isHost }, (err) => {
+                    if (err) console.error("Presence Enter Error:", err);
+                });
 
-                // Host-only networking maintenance
+                // Host-side Sync (Aggressive)
                 if (hosting) {
-                    // 1. Keep-Alive Heartbeat (every 15s)
                     setInterval(() => {
                         if (channel) broadcast({ type: 'heartbeat' });
                     }, 15000);
 
-                    // 2. Presence Sync Guard (every 5s)
                     setInterval(() => {
-                        channel.presence.get((err, members) => {
-                            if (!err && members) {
-                                const currentAblyIds = members.map(m => m.clientId);
+                        channel.presence.get({ waitForSync: true }, (err, members) => {
+                            if (err || !members) return;
+                            const activeIds = members.map(m => m.clientId);
 
-                                // SELF-VERIFY: If host isn't in the list, the list might be stale. Do NOT kick.
-                                if (!currentAblyIds.includes(myId)) {
-                                    console.log("Presence Guard: Local Host ID not found in presence list yet.");
-                                    return;
+                            // Safety: host must see themselves to trust the list
+                            if (!activeIds.includes(myId)) return;
+
+                            let changed = false;
+                            for (let i = players.length - 1; i >= 0; i--) {
+                                const p = players[i];
+                                if (p.isHost) continue;
+                                if (Date.now() - (p.joinedAt || 0) < 15000) continue;
+
+                                if (!activeIds.includes(p.id)) {
+                                    console.warn("GUARD: Removing stale player", p.id);
+                                    players.splice(i, 1);
+                                    changed = true;
                                 }
-                                for (let i = players.length - 1; i >= 0; i--) {
-                                    const p = players[i];
-                                    if (p.isHost) continue; // Don't disconnect host
-
-                                    // 15s grace period for newly joined players to register with Ably
-                                    if (Date.now() - (p.joinedAt || 0) < 15000) continue;
-
-                                    if (!currentAblyIds.includes(p.id)) {
-                                        console.log("Presence Guard: Player missing - triggering disconnect", p.id);
-                                        handleDisconnect(p.id);
-                                    }
-                                }
+                            }
+                            if (changed) {
+                                broadcastPlayers();
+                                updatePlayerList();
                             }
                         });
                     }, 5000);
                 }
 
-                window.addEventListener('beforeunload', () => {
-                    if (channel) channel.presence.leave();
-                });
+                window.addEventListener('beforeunload', () => { if (channel) channel.presence.leave(); });
 
                 if (!hosting) {
                     broadcast({ type: 'join', name: myName, id: myId });
@@ -560,11 +563,11 @@
                     document.getElementById('wait-room').style.display = 'block';
                     document.getElementById('start-game-btn').style.display = 'none';
                     document.getElementById('room-id-display').innerText = roomCode;
-                    updatePlayerList(); // Initial update for guest
+                    updatePlayerList();
                 }
             });
 
-            ably.connection.on('failed', () => alert("Connection to Ably failed!"));
+            ably.connection.on('failed', () => alert("Ably Connection Failed"));
         }
 
         function handleMessage(data) {
