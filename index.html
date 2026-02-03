@@ -361,6 +361,9 @@
             <div class="round-info">
                 <div class="round-badge" id="diff-badge">EASY</div>
                 <h2 id="round-number">ROUND 1</h2>
+                <div id="game-room-id"
+                    style="font-size: 0.8rem; color: var(--secondary-text); margin-top: 5px; font-family: monospace;">
+                    ROOM: ----</div>
             </div>
 
             <div id="player-list">
@@ -416,7 +419,7 @@
             }
         };
 
-        // --- DON'T EVEN BOTHER STEALING IT - YOU WON'T BE ABLE TO DO MUCH ANYWAY -Stef ---
+        // DON'T EVEN BOTHER STEALING IT - YOU WON'T BE ABLE TO DO MUCH WITH IT ANYWAY LOL -Stef
         const ABLY_KEY = 'Wwc3Hw.ZDnKdg:aX6tvLkW4-tIKleXroX-f4YacnGk5uNzEmMrJ3q13D8';
         let ably, channel;
 
@@ -455,20 +458,29 @@
 
         // --- Networking (Ably) ---
         function hostGame() {
-            myName = document.getElementById('name-input').value || "Host";
+            const nameInput = document.getElementById('name-input');
+            myName = nameInput.value.trim();
+            if (!myName) return alert("Please enter your name first!");
+
             const val = parseInt(document.getElementById('max-players-input').value);
             maxPlayersLimit = (val && val >= 2) ? val : 8;
 
             const roomCode = generateShortId();
+            nameInput.style.display = 'none'; // Lock in name
             initAbly(roomCode, true);
         }
 
         function joinGame() {
-            let roomCode = document.getElementById('join-room-id').value;
-            if (!roomCode) return alert("Please enter a Room ID");
-            roomCode = roomCode.trim().toUpperCase();
+            const nameInput = document.getElementById('name-input');
+            const roomInput = document.getElementById('join-room-id');
+            let roomCode = roomInput.value.trim().toUpperCase();
 
-            myName = document.getElementById('name-input').value || "Guest";
+            if (!roomCode) return alert("Please enter a Room ID");
+
+            myName = nameInput.value.trim();
+            if (!myName) return alert("Please enter your name first!");
+
+            nameInput.style.display = 'none'; // Lock in name
             initAbly(roomCode, false);
         }
 
@@ -583,7 +595,14 @@
                     document.getElementById('wait-room').style.display = 'block';
                     document.getElementById('start-game-btn').style.display = 'none';
                     document.getElementById('room-id-display').innerText = roomCode;
+                    // Also show room code in game screen for later
+                    const gameRoomId = document.getElementById('game-room-id');
+                    if (gameRoomId) gameRoomId.innerText = `ROOM: ${roomCode}`;
                     updatePlayerList();
+                } else {
+                    // Host also shows room code in game screen
+                    const gameRoomId = document.getElementById('game-room-id');
+                    if (gameRoomId) gameRoomId.innerText = `ROOM: ${roomCode}`;
                 }
             });
 
