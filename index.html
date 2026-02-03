@@ -154,23 +154,26 @@
             right: 0;
             display: flex;
             justify-content: center;
-            gap: 4px;
-            padding: 0 20px;
+            gap: 2px;
+            padding: 0 10px;
             pointer-events: none;
         }
 
         .bin {
             flex: 1;
+            min-width: 0;
             height: 35px;
             background: #2f4553;
             border-radius: 4px;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: 0.7rem;
+            font-size: 0.75rem;
             font-weight: 800;
             color: #fff;
             transition: transform 0.1s;
+            overflow: hidden;
+            white-space: nowrap;
         }
 
         .bin.active {
@@ -381,11 +384,12 @@
         </div>
 
         <div class="board-container">
+            <div id="status-text"
+                style="margin-bottom: 10px; color: var(--secondary-text); font-weight: bold; background: rgba(0,0,0,0.3); padding: 5px 15px; border-radius: 20px;">
+                Waiting for players...</div>
             <div id="canvas-wrapper">
                 <div class="bins-container" id="bins-row"></div>
             </div>
-            <div id="status-text" style="margin-top: 10px; color: var(--secondary-text); font-weight: bold;">Waiting for
-                players...</div>
         </div>
     </div>
 
@@ -496,12 +500,28 @@
 
                 channel.presence.subscribe('leave', member => {
                     console.log("Member left presence:", member.clientId);
-                    if (isHost) {
-                        handleDisconnect(member.clientId);
-                    }
+                    if (isHost) handleDisconnect(member.clientId);
                 });
 
                 channel.presence.enter({ name: myName });
+
+                // Host-only presence sync interval
+                if (hosting) {
+                    setInterval(() => {
+                        channel.presence.get((err, members) => {
+                            if (!err) {
+                                const currentAblyIds = members.map(m => m.clientId);
+                                // Check if anyone in our players list is NOT in Ably anymore
+                                for (let i = players.length - 1; i >= 0; i--) {
+                                    if (!currentAblyIds.includes(players[i].id)) {
+                                        console.log("Presence sync: Player missing", players[i].id);
+                                        handleDisconnect(players[i].id);
+                                    }
+                                }
+                            }
+                        });
+                    }, 5000);
+                }
 
                 window.addEventListener('beforeunload', () => {
                     if (channel) channel.presence.leave();
@@ -580,8 +600,12 @@
 
 
         function handleDisconnect(peerId) {
+            console.log("handleDisconnect called for:", peerId);
             const index = players.findIndex(p => p.id === peerId);
-            if (index === -1) return;
+            if (index === -1) {
+                console.log("Player not found in list for disconnect:", peerId);
+                return;
+            }
             const wasTheirTurn = (index === turnIndex);
 
             console.log(`Disconnecting player at index ${index}. Turn was ${turnIndex}.`);
@@ -700,8 +724,11 @@
             const startY = 40;
 
             if (currentRound >= 12) {
-                // IMPOSSIBLE: Single horizontal bar + X0 trap
-                obs.push({ x: startX, y: startY + (totalBoardHeight * 0.5), width: 300, height: 15, isX0: true });
+                // IMPOSSIBLE: Two split bars with a gap in the center
+                const gap = 80;
+                const barWidth = 140;
+                obs.push({ x: startX - (barWidth / 2 + gap / 2), y: startY + (totalBoardHeight * 0.5), width: barWidth, height: 15, isX0: true });
+                obs.push({ x: startX + (barWidth / 2 + gap / 2), y: startY + (totalBoardHeight * 0.5), width: barWidth, height: 15, isX0: true });
             } else if (currentRound >= 7) {
                 // INSANE: 5 random red bricks
                 for (let i = 0; i < 5; i++) {
