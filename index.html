@@ -406,7 +406,7 @@
 
     <div
         style="position: fixed; bottom: 10px; width: 100%; text-align: center; color: rgba(255,255,255,0.5); font-size: 0.8rem; pointer-events: none; z-index: 9999;">
-        Plinko Multiplayer. Vibe Coded by Stef using Antigravity. <a
+        Plinko Multiplayer. Vibe-Coded by Stef using Antigravity. <a
             href="https://github.com/Stef4453/MultiplayerPlinko" target="_blank"
             style="color: rgba(255,255,255,0.8); text-decoration: none; pointer-events: auto;">GitHub Repo</a>
     </div>
@@ -771,8 +771,8 @@
                     }
                     break;
                 case 'game_end':
-                    // Transition to new room after game ends
-                    showAlert(`🎮 Game Over! 🏆\n\nWinner: ${data.winner}\n\nReturning to lobby...`, "Result", () => location.reload());
+                    // Transition back to lobby after game ends
+                    showAlert(`🎮 Game Over! 🏆\n\nWinner: ${data.winner}\n\nReturning to lobby...`, "Result", () => resetToLobby());
                     break;
             }
         }
@@ -793,7 +793,7 @@
             players.splice(index, 1);
             if (players.length <= 1 && gameActive) {
                 broadcast({ type: 'error', msg: "Game ended prematurely: No other players remaining." });
-                showAlert("All other players left. Game Over!", "Game Over", () => location.reload());
+                showAlert("All other players left. Game Over!", "Game Over", () => resetToLobby());
                 return;
             }
             if (gameActive) {
@@ -1044,6 +1044,10 @@
 
                 div.className = `player-item ${originalIdx === turnIndex ? 'active' : ''} ${extraClass}`;
 
+                if (p.isHost) {
+                    statusTag = '<span style="font-size: 0.6rem; color: var(--accent-color); margin-bottom: 2px;">[HOST]</span>' + statusTag;
+                }
+
                 // Style adjustment: ensure text is dimmed but layout remains clean
                 if (extraClass) {
                     div.style.color = "rgba(255,255,255,0.4)";
@@ -1210,7 +1214,7 @@
                         broadcast({ type: 'game_end', winner: winnerName });
 
                         // Host also sees the message
-                        showAlert(`🎮 Game Over! 🏆\n\nWinner: ${winnerName}\n\nReturning to lobby...`, "Result", () => location.reload());
+                        showAlert(`🎮 Game Over! 🏆\n\nWinner: ${winnerName}\n\nReturning to lobby...`, "Result", () => resetToLobby());
                         return;
                     }
 
@@ -1309,6 +1313,131 @@
                 alertCallback = null;
             }
         }
+
+        function resetToLobby() {
+            console.log("Resetting to lobby...");
+            gameActive = false;
+            currentRound = 1;
+            turnIndex = 0;
+
+            // Reset all players locally (Points & Alive status)
+            players.forEach(p => {
+                p.points = 1000;
+                p.alive = true;
+            });
+
+            // UI Transitions
+            document.getElementById('main-game').style.display = 'none';
+            document.getElementById('lobby-screen').style.display = 'flex';
+            document.getElementById('pre-room').style.display = 'none';
+            document.getElementById('wait-room').style.display = 'block';
+
+            // Reset Board
+            if (engine) {
+                World.clear(engine.world, false);
+            }
+            lastInitedRows = 0;
+            lastInitedRound = 0;
+
+            updatePlayerList();
+            updateHeader();
+        }
+
+        // --- Admin/Debug Tools (Use in Browser Console) ---
+        window.PlinkoAdmin = {
+            // Set points for any player by ID or Index (1-based)
+            // Usage: PlinkoAdmin.setPoints(1, 5000)
+            setPoints: function (target, points) {
+                if (!isHost) return console.error("Only the HOST can use admin commands.");
+                let player;
+                if (typeof target === 'number') {
+                    player = players[target - 1];
+                } else {
+                    player = players.find(p => p.id === target);
+                }
+
+                if (player) {
+                    player.points = points;
+                    player.alive = points >= 10;
+                    broadcastPlayers();
+                    updatePlayerList();
+                    console.log(`Admin: Set ${player.name}'s points to ${points}`);
+                } else {
+                    console.error("Player not found.");
+                }
+            },
+
+            // Skip to a specific round
+            // Usage: PlinkoAdmin.setRound(12)
+            setRound: function (round) {
+                if (!isHost) return console.error("Only the HOST can use admin commands.");
+                currentRound = round;
+                currentObstacles = generateObstacles(getRowsForRound(currentRound));
+                initGame(true);
+                broadcastSync();
+                console.log(`Admin: Skipped to Round ${round}`);
+            },
+
+            // Force a confetti-style jackpot effect on coordinates
+            // Usage: PlinkoAdmin.fakeJackpot()
+            fakeJackpot: function () {
+                showFloatingResult(config.width / 2, 10, 1000);
+                console.log("Admin: Triggered visual jackpot.");
+            },
+
+            // Force a win for a specific player
+            // Usage: PlinkoAdmin.forceWin(1)
+            forceWin: function (target) {
+                if (!isHost) return console.error("Only the HOST can use admin commands.");
+                let player;
+                if (typeof target === 'number') {
+                    player = players[target - 1];
+                } else {
+                    player = players.find(p => p.id === target);
+                }
+
+                if (player) {
+                    broadcast({ type: 'game_end', winner: player.name });
+                    showAlert(`🎮 Admin Force Win! 🏆\n\nWinner: ${player.name}\n\nReturning to lobby...`, "Admin Victory", () => resetToLobby());
+                    console.log(`Admin: Forced win for ${player.name}`);
+                } else {
+                    console.error("Player not found.");
+                }
+            },
+
+            // Shutdown the game for everyone (Force reload)
+            // Usage: PlinkoAdmin.shutdown()
+            shutdown: function () {
+                if (!isHost) return console.error("Only the HOST can use admin commands.");
+                broadcast({ type: 'error', msg: "Host has shut down the game session." });
+                console.log("Admin: Shutting down game...");
+                location.reload();
+            },
+
+            // List all player IDs for easier targeting
+            listPlayers: function () {
+                console.table(players.map((p, i) => ({
+                    index: i + 1,
+                    name: p.name,
+                    id: p.id,
+                    points: p.points,
+                    alive: p.alive
+                })));
+            },
+
+            help: function () {
+                console.log("%c--- Plinko Royale Admin Commands ---", "color: #00e701; font-weight: bold; font-size: 14px;");
+                console.log("PlinkoAdmin.listPlayers() - View all players and IDs");
+                console.log("PlinkoAdmin.setPoints(index, amount) - Change someone's points (Host only)");
+                console.log("PlinkoAdmin.setRound(number) - Skip to round (Host only)");
+                console.log("PlinkoAdmin.forceWin(index) - Instantly end game with a winner (Host only)");
+                console.log("PlinkoAdmin.shutdown() - Close the game for everyone (Host only)");
+                console.log("PlinkoAdmin.fakeJackpot() - Trigger big win visuals");
+            }
+        };
+
+        // Welcome message in console
+        console.log("%cPlinko Royale Loaded! Type 'PlinkoAdmin.help()' for debug commands.", "color: #00e701; font-weight: bold;");
 
     </script>
 </body>
