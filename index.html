@@ -950,10 +950,12 @@
                     `<button onclick="kickPlayer('${p.id}')" style="margin-left: auto; padding: 4px 8px; background: #ff1744; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">KICK</button>` : '';
 
                 div.innerHTML = `
-                <span>${idx + 1}. ${p.name}${p.id === myId ? ' (You)' : ''}</span>
-                <span style="font-weight:900">${Math.floor(p.points)}</span>
-                ${kickBtn}
-            `;
+                    <span>${idx + 1}. ${p.name}${p.id === myId ? ' (You)' : ''}</span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        ${kickBtn}
+                        <span style="font-weight:900">${Math.floor(p.points)}</span>
+                    </div>
+                `;
                 container.appendChild(div);
                 if (p.id === myId) {
                     document.getElementById('my-score').innerText = Math.floor(p.points);
