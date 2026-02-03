@@ -528,28 +528,42 @@
                     }, 15000);
 
                     setInterval(() => {
+                        console.log("GUARD: Running presence check...");
                         channel.presence.get({ waitForSync: true }, (err, members) => {
-                            if (err || !members) return;
+                            if (err) {
+                                console.error("GUARD: Error getting presence:", err);
+                                return;
+                            }
+                            if (!members) {
+                                console.warn("GUARD: No members returned");
+                                return;
+                            }
+
                             const activeIds = members.map(m => m.clientId);
+                            console.log("GUARD: Active IDs from Ably:", activeIds);
+                            console.log("GUARD: Current player IDs:", players.map(p => p.id));
 
                             // Safety: host must see themselves to trust the list
-                            if (!activeIds.includes(myId)) return;
+                            if (!activeIds.includes(myId)) {
+                                console.warn("GUARD: Host not in presence list, skipping check");
+                                return;
+                            }
 
-                            let changed = false;
+                            // Check each player against the presence list
                             for (let i = players.length - 1; i >= 0; i--) {
                                 const p = players[i];
                                 if (p.isHost) continue;
-                                if (Date.now() - (p.joinedAt || 0) < 15000) continue;
+
+                                const gracePeriod = Date.now() - (p.joinedAt || 0);
+                                if (gracePeriod < 15000) {
+                                    console.log(`GUARD: Player ${p.id} in grace period (${gracePeriod}ms)`);
+                                    continue;
+                                }
 
                                 if (!activeIds.includes(p.id)) {
-                                    console.warn("GUARD: Removing stale player", p.id);
-                                    players.splice(i, 1);
-                                    changed = true;
+                                    console.warn("GUARD: Player missing from presence, disconnecting:", p.id, p.name);
+                                    handleDisconnect(p.id);
                                 }
-                            }
-                            if (changed) {
-                                broadcastPlayers();
-                                updatePlayerList();
                             }
                         });
                     }, 5000);
