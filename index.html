@@ -314,6 +314,56 @@
             font-size: 0.7rem;
             border-radius: 4px;
         }
+
+        /* Custom Alert */
+        .alert-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            backdrop-filter: blur(5px);
+        }
+
+        .alert-card {
+            background: var(--panel-color);
+            padding: 30px;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 400px;
+            border: 2px solid var(--accent-color);
+            text-align: center;
+            box-shadow: 0 0 30px rgba(0, 231, 1, 0.2);
+            animation: modal-pop 0.3s ease-out;
+        }
+
+        @keyframes modal-pop {
+            0% {
+                transform: scale(0.8);
+                opacity: 0;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .alert-title {
+            color: var(--accent-color);
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .alert-msg {
+            color: white;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
     </style>
 </head>
 
@@ -331,7 +381,12 @@
                 </div>
                 <button onclick="hostGame()" class="btn-primary" style="width: 100%">Host New Game</button>
                 <div style="margin: 15px 0; color: var(--secondary-text)">— OR —</div>
-                <input type="text" id="join-room-id" class="input-box" placeholder="Enter Room ID">
+                <div style="display: flex; align-items: center; gap: 8px; margin: 10px 0;">
+                    <span
+                        style="font-size: 1.2rem; font-weight: bold; color: var(--secondary-text); font-family: monospace;">PR-</span>
+                    <input type="text" id="join-room-id" class="input-box" placeholder="Enter Code"
+                        style="margin: 0; flex: 1;">
+                </div>
                 <button onclick="joinGame()" class="btn-secondary" style="width: 100%">Join Game</button>
             </div>
             <div id="wait-room" style="display: none;">
@@ -402,6 +457,15 @@
         </div>
     </div>
 
+    <!-- Custom Alert Modal -->
+    <div id="custom-alert" class="alert-overlay">
+        <div class="alert-card">
+            <div class="alert-title">Notification</div>
+            <div id="alert-msg" class="alert-msg">Message goes here.</div>
+            <button onclick="closeAlert()" class="btn-primary" style="width: 100%">OK</button>
+        </div>
+    </div>
+
     <script>
         // --- State & Config ---
         const config = {
@@ -460,7 +524,7 @@
         function hostGame() {
             const nameInput = document.getElementById('name-input');
             myName = nameInput.value.trim();
-            if (!myName) return alert("Please enter your name first!");
+            if (!myName) return showAlert("Please enter your name first!", "Hold up!");
 
             const val = parseInt(document.getElementById('max-players-input').value);
             maxPlayersLimit = (val && val >= 2) ? val : 8;
@@ -473,12 +537,15 @@
         function joinGame() {
             const nameInput = document.getElementById('name-input');
             const roomInput = document.getElementById('join-room-id');
-            let roomCode = roomInput.value.trim().toUpperCase();
+            let rawCode = roomInput.value.trim().toUpperCase();
 
-            if (!roomCode) return alert("Please enter a Room ID");
+            if (!rawCode) return showAlert("Please enter a Room ID", "Join Error");
+
+            // Automatically handle if player puts PR- themselves
+            let roomCode = rawCode.startsWith('PR-') ? rawCode : 'PR-' + rawCode;
 
             myName = nameInput.value.trim();
-            if (!myName) return alert("Please enter your name first!");
+            if (!myName) return showAlert("Please enter your name first!", "Hold up!");
 
             nameInput.style.display = 'none'; // Lock in name
             initAbly(roomCode, false);
@@ -529,8 +596,7 @@
                         const isHostLeaving = (member.data && member.data.isHost) ||
                             players.some(p => p.isHost && p.id === member.clientId);
                         if (isHostLeaving) {
-                            alert("Host left. Connection terminated.");
-                            location.reload();
+                            showAlert("Host left. Connection terminated.", "Room Closed", () => location.reload());
                         }
                     }
                 });
@@ -606,7 +672,7 @@
                 }
             });
 
-            ably.connection.on('failed', () => alert("Ably Connection Failed"));
+            ably.connection.on('failed', () => showAlert("Ably Connection Failed", "Connection Error"));
         }
 
         function handleMessage(data) {
@@ -690,19 +756,16 @@
                     break;
                 case 'error':
                     if (data.targetId && data.targetId !== myId) return;
-                    alert(data.msg);
-                    location.reload();
+                    showAlert(data.msg, "Error", () => location.reload());
                     break;
                 case 'kick':
                     if (data.targetId === myId) {
-                        alert("You have been kicked by the host.");
-                        location.reload();
+                        showAlert("You have been kicked by the host.", "Kicked", () => location.reload());
                     }
                     break;
                 case 'game_end':
                     // Transition to new room after game ends
-                    alert(`🎮 Game Over! 🏆\n\nWinner: ${data.winner}\n\nReturning to lobby...`);
-                    location.reload();
+                    showAlert(`🎮 Game Over! 🏆\n\nWinner: ${data.winner}\n\nReturning to lobby...`, "Result", () => location.reload());
                     break;
             }
         }
@@ -723,8 +786,7 @@
             players.splice(index, 1);
             if (players.length <= 1 && gameActive) {
                 broadcast({ type: 'error', msg: "Game ended prematurely: No other players remaining." });
-                alert("All other players left. Game Over!");
-                location.reload();
+                showAlert("All other players left. Game Over!", "Game Over", () => location.reload());
                 return;
             }
             if (gameActive) {
@@ -1105,8 +1167,7 @@
                         broadcast({ type: 'game_end', winner: winnerName });
 
                         // Host also sees the message
-                        alert(`🎮 Game Over! 🏆\n\nWinner: ${winnerName}\n\nReturning to lobby...`);
-                        location.reload();
+                        showAlert(`🎮 Game Over! 🏆\n\nWinner: ${winnerName}\n\nReturning to lobby...`, "Result", () => location.reload());
                         return;
                     }
 
@@ -1188,6 +1249,22 @@
                 div.style.background = m < 1 ? '#cc4d29' : (m >= 5 ? '#00bc00' : '#627d14');
                 row.appendChild(div);
             });
+        }
+
+        let alertCallback = null;
+        function showAlert(msg, title = "Notification", callback = null) {
+            document.getElementById('alert-msg').innerText = msg;
+            document.querySelector('.alert-title').innerText = title;
+            document.getElementById('custom-alert').style.display = 'flex';
+            alertCallback = callback;
+        }
+
+        function closeAlert() {
+            document.getElementById('custom-alert').style.display = 'none';
+            if (alertCallback) {
+                alertCallback();
+                alertCallback = null;
+            }
         }
 
     </script>
